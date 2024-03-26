@@ -1,4 +1,5 @@
 // https://docs.upbit.com/reference/%EC%A3%BC%EB%AC%B8%ED%95%98%EA%B8%B0
+
 const accessKey = "";
 const secretKey = "";
 
@@ -32,11 +33,29 @@ function buy(market, krw) {
     headers: { Authorization: `Bearer ${token}` },
     json: body,
   };
-  request(options, (error, response, body) => {
-    if (error) console.log(error);
-    else console.log(body);
+  console.log(`trying to buy bitcoin ${krw}won`)
+
+  return new Promise(function (resolve, reject) {
+    request(options, (error, response, body) => {
+      if (error) reject(error);
+      else resolve(body);
+    });
   });
 }
 
-buy("KRW-BTC", 100000);
+exports.handler = async function (event) {
+  try {
+    const result = await buy("KRW-BTC", 100000);
+    console.log(result)
+    return {
+        statusCode: 200,
+        body: JSON.stringify('Success'),
+    };
+  } catch(err) {
+    return {
+      statusCode: 500,
+      body: JSON.stringify(`Fail ${err}`),
+    };
+  }
+};
 
