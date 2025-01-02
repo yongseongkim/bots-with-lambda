@@ -1,11 +1,27 @@
 import chromium from '@sparticuz/chromium';
-import fs from "fs";
+import aws from 'aws-sdk';
 import puppeteer from 'puppeteer-core';
+
+const bucketName = 'bots-on-lambda'; // Replace with your bucket name
+
+const s3 = new aws.S3();
 
 const delay = async (milliseconds) => {
   return new Promise((resolve) => {
     setTimeout(resolve, milliseconds);
   });
+}
+
+const formatDate = (date) => {
+  const pad = (n) => n.toString().padStart(2, '0'); // Ensures two-digit formatting
+
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1); // Months are zero-based
+  const day = pad(date.getDate());
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+
+  return `${year}-${month}-${day}-${hours}-${minutes}`;
 }
 
 class CourtAuctionCrawler {
@@ -223,7 +239,7 @@ class CourtAuctionCrawler {
     const pageNumbers = await this.getPageNumbersInListPage()
     console.log(`  총 ${pageNumbers.length} 페이지 요소들 가져오기`)
 
-    for (const pageNumber of pageNumbers) {
+    for (const pageNumber of pageNumbers.slice(0, 1)) {
       console.log(`    ${pageNumber + 1}번째 페이지 이동`)
       await this.goToListPageN(pageNumber)
       await delay(1500)
@@ -255,13 +271,8 @@ class CourtAuctionCrawler {
       }
     }
 
-    try {
-      fs.writeFileSync('data.json', JSON.stringify(result, null, 1));
-    } catch (err) {
-      console.error('  법원경매정보 파일 쓰기 실패', err);
-    }
-
     console.log(`- 법원경매정보 크롤링 끝(code: ${this.siDoCode})`)
+    return result
   }
 
   async close() {
@@ -304,8 +315,18 @@ export const handler = async () => {
   for (const sidoCode of siDoCodes) {
     const crawler = new CourtAuctionCrawler(browser, sidoCode)
     await crawler.initialize()
-    await crawler.run()
+    const result = await crawler.run()
+
+    const params = {
+      Bucket: bucketName,
+      Key: `realStateAuctionData/${formatDate(new Date())}.json`,
+      Body: JSON.stringify(result, null, 1),
+      ContentType: 'application/json',
+    };
+    await s3.putObject(params).promise();
+
     await crawler.close()
   }
+
   await browser.close();
 }
